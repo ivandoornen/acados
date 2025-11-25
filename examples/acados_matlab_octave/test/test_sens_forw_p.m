@@ -31,8 +31,7 @@
 
 %% test of native matlab interface (ERK + forward sens + param sens)
 clear VARIABLES, clear mex
-addpath('C:\Users\id0123\acados\examples\acados_matlab_octave\pendulum_on_cart_model');
-cd C:\Users\id0123\acados\examples\acados_matlab_octave\test
+addpath('../pendulum_on_cart_model/');
 
 %% integrator / method
 method = 'erk';   % only ERK
@@ -47,6 +46,8 @@ num_steps   = 4;
 newton_iter = 3;
 
 Ts         = 0.1;
+x0         = [1e-1; 1e0; 2e-1; 2e0];   
+u          = 0;      
 FD_epsilon = 1e-6;
 
 %% model 
@@ -63,16 +64,8 @@ else
     np = 0;
 end
 
-x0         = [1e-1; 1e0; 2e-1; 2e0];   % [p; theta; v; dtheta]
-% x0 = zeros(nx,1);       
-% x0(2) = 0.4;             
-u  = 0;                  % no input
-
-% nominal p
 if np > 0
-    p0 = 1;   % p = 0 => f = (1+p)*f0, df/dp = f0
-else
-    p0 = [];
+    p0 = 1;  
 end
 
 %% acados sim model
@@ -100,7 +93,7 @@ sim_opts.set('num_steps', num_steps);
 sim_opts.set('newton_iter', newton_iter);
 sim_opts.set('method', method);
 sim_opts.set('sens_forw', sens_forw);
-sim_opts.set('sens_forw_p', sens_forw_p);   % NEW
+sim_opts.set('sens_forw_p', sens_forw_p);   
 sim_opts.set('jac_reuse', jac_reuse);
 
 %% acados sim
@@ -119,7 +112,7 @@ sim_solver.solve();
 xn         = sim_solver.get('xn');
 S_forw_ind = sim_solver.get('S_forw');
 if np > 0
-    S_p_ind = sim_solver.get('S_p');   % nx x np
+    S_p_ind = sim_solver.get('S_p');   
 else
     S_p_ind = [];
 end
@@ -176,7 +169,7 @@ end
 %% --- Param sensitivities S_p vs finite differences (p) ---
 
 if np > 0
-    % make sure we are back at nominal (opts for FD above only affect cost, not x,u,p set)
+    % Reset state, input, and parameter to nominal
     sim_solver.set('x', x0);
     sim_solver.set('u', u);
     sim_solver.set('p', p0);
