@@ -471,6 +471,73 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
             return;
         }
     }
+	else if (!strcmp(field, "S_p"))
+	{
+		/* ocp.get('S_p') -> 1xN cell, ocp.get('S_p', k) -> [nx1 x np_eff] */
+		if (nrhs == 2)
+		{
+			mxArray *cell = mxCreateCellMatrix(1, N);
+			plhs[0] = cell;
+			for (int kk = 0; kk < N; kk++)
+			{
+				int nx1    = ocp_nlp_dims_get_from_attr(config, dims, out, kk, "x");
+				int np_eff = ocp_nlp_dims_get_from_attr(config, dims, out, kk, "S_p");
+				mxArray *S = mxCreateDoubleMatrix(nx1, np_eff, mxREAL);
+				double *Sp = mxGetPr(S);
+				ocp_nlp_get_at_stage(solver, kk, "S_p", Sp);
+				mxSetCell(cell, kk, S);
+			}
+		}
+		else if (nrhs == 3)
+		{
+			int nx1    = ocp_nlp_dims_get_from_attr(config, dims, out, stage, "x");
+			int np_eff = ocp_nlp_dims_get_from_attr(config, dims, out, stage, "p");
+			plhs[0] = mxCreateDoubleMatrix(nx1, np_eff, mxREAL);
+			double *Sp = mxGetPr(plhs[0]);
+			ocp_nlp_get_at_stage(solver, stage, "S_p", Sp);
+		}
+		else
+		{
+			sprintf(buffer, "ocp_get('S_p'): wrong nrhs: %d\n", nrhs);
+			mexErrMsgTxt(buffer);
+		}
+	}
+    else if (!strcmp(field, "zoRO_Pk"))
+    {
+        /* 
+         * ocp.get('zoRO_Pk')
+         *   -> 1x(N+1) cell, with P^k in column-major, size [nx_k x nx_k]
+         *
+         * ocp.get('zoRO_Pk', k)
+         *   -> single [nx_k x nx_k] matrix for stage k.
+         */
+        if (nrhs == 2)
+        {
+            mxArray *cell = mxCreateCellMatrix(1, N+1);
+            plhs[0] = cell;
+
+            for (int kk = 0; kk <= N; kk++)
+            {
+                int nxk = ocp_nlp_dims_get_from_attr(config, dims, out, kk, "x");
+                mxArray *P = mxCreateDoubleMatrix(nxk, nxk, mxREAL);
+                double *P_ptr = mxGetPr(P);
+                ocp_nlp_get_at_stage(solver, kk, "P_matrix", P_ptr);
+                mxSetCell(cell, kk, P);
+            }
+        }
+        else if (nrhs == 3)
+        {
+            int nxk = ocp_nlp_dims_get_from_attr(config, dims, out, stage, "x");
+            plhs[0] = mxCreateDoubleMatrix(nxk, nxk, mxREAL);
+            double *P_ptr = mxGetPr(plhs[0]);
+            ocp_nlp_get_at_stage(solver, stage, "P_matrix", P_ptr);
+        }
+        else
+        {
+            sprintf(buffer, "ocp_get('zoRO_Pk'): wrong nrhs: %d\n", nrhs);
+            mexErrMsgTxt(buffer);
+        }
+    }
     else if (!strcmp(field, "status"))
     {
         plhs[0] = mxCreateNumericMatrix(1, 1, mxDOUBLE_CLASS, mxREAL);
@@ -711,7 +778,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     else
     {
         MEX_FIELD_NOT_SUPPORTED_SUGGEST(fun_name, field,
-             "x, u, z, pi, lam, sl, su, t, sens_x, sens_u, sens_pi, status, sqp_iter, nlp_iter, time_tot, time_lin, time_reg, time_qp_sol, stat, qp_solver_cond_H, qp_A, qp_B, qp_Q, qp_R, qp_S, qp_b, qp_q, qp_r");
+             "x, u, z, pi, lam, sl, su, t, sens_x, sens_u, sens_pi, S_p, zoRO_Pk, status, sqp_iter, nlp_iter, time_tot, time_lin, time_reg, time_qp_sol, stat, qp_solver_cond_H, qp_A, qp_B, qp_Q, qp_R, qp_S, qp_b, qp_q, qp_r");
     }
 
     return;

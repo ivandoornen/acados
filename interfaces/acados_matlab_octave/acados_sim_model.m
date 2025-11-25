@@ -59,6 +59,8 @@ classdef acados_sim_model < handle
                 obj.model_struct.dim_nz = value;
             elseif (strcmp(field, 'dim_np'))
                 obj.model_struct.dim_np = value;
+			elseif (strcmp(field, 'dim_np_global'))
+				obj.model_struct.dim_np_global = value;
             % symbolics
             elseif (strcmp(field, 'sym_x'))
                 obj.model_struct.sym_x = value;
@@ -70,6 +72,8 @@ classdef acados_sim_model < handle
                 obj.model_struct.sym_z = value;
             elseif (strcmp(field, 'sym_p'))
                 obj.model_struct.sym_p = value;
+			elseif (strcmp(field, 'sym_p_global'))
+				obj.model_struct.sym_p_global = value;
             % dynamics
             elseif (strcmp(field, 'dyn_type'))
                 obj.model_struct.dyn_type = value;
