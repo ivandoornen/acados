@@ -1749,7 +1749,7 @@ int custom_update_function({{ model.name }}_solver_capsule* capsule, double* dat
 {%- endif %}
     uncertainty_propagate_and_update(nlp_solver, nlp_in, nlp_out, custom_mem, data, data_len);
 
-    return 1;
+    return 0;
 }
 
 

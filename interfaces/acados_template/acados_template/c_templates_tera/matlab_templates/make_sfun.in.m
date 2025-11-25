@@ -461,7 +461,7 @@ i_in = i_in + 1;
 {# ---- Optional zoRO payload input to zoRO custom_update ---- #}
 {%- if custom_update_filename != "" and simulink_opts.inputs.zoRO_payload %}
     {%- set port_label = "zoRO_payload" %}
-    {%- set port_size  = simulink_opts.zoRO_payload_size | default(value='?') %}
+    {%- set port_size  = zoro_description.data_size %}
     input_note = strcat(input_note, num2str(i_in), ') {{ port_label }} - vector forwarded to custom_update_function, size [{{ port_size }}]\n ');
     sfun_input_names = [sfun_input_names; '{{ port_label }} [{{ port_size }}]'];
     i_in = i_in + 1;

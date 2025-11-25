@@ -626,9 +626,8 @@ static void mdlInitializeSizes (SimStruct *S)
 
 {%- if custom_update_filename != "" and simulink_opts.inputs.zoRO_payload == 1 -%}
   {%- set i_input = i_input + 1 -%}
-  // Extra inport for custom_update payload (variable-length vector)
-  ssSetInputPortVectorDimension(S, {{ i_input }}, DYNAMICALLY_SIZED);
-  ssSetInputPortRequiredContiguous(S, {{ i_input }}, 1);
+  // Extra inport for custom_update payload 
+  ssSetInputPortVectorDimension(S, {{ i_input }}, {{ zoro_description.data_size }});
   {%- set zoro_port_index = i_input -%}
 {%- endif -%}
 

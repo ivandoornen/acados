@@ -162,14 +162,11 @@ classdef ZoroDescription < handle
             end
             if obj.input_P0
                 size_i = dims.nx * dims.nx
-                fprintf('%d) input: P0; full matrix in column-major format, size: [nx*nx] = %d\n', i_component, size_i);
-									
+                fprintf('%d) input: P0; full matrix in column-major format, size: [nx*nx] = %d\n', i_component, size_i);									
                 i_component = i_component + 1;
-                data_size = data_size + size_i;
-																					 
+                data_size = data_size + size_i;																					 
             end
 										  
-
             % W streaming
             if obj.input_W_diag
                 size_i = obj.nw
@@ -179,18 +176,14 @@ classdef ZoroDescription < handle
             end
             if obj.input_W
                 size_i = obj.nw * obj.nw
-                fprintf('%d) input: W; full matrix in column-major format, size: [nw*nw] = %d\n', i_component, size_i);
-								   
+                fprintf('%d) input: W; full matrix in column-major format, size: [nw*nw] = %d\n', i_component, size_i);				   
                 i_component = i_component + 1;
-                data_size = data_size + size_i;
-																				   
+                data_size = data_size + size_i;																			   
             end
 										  
-
             % Sigma_p streaming (for S_p term)
             if obj.input_Sigma_p_diag && obj.np > 0
-                size_i = obj.np
-										 
+                size_i = obj.np									 
                 fprintf('%d) input: diag(Sigma_p), size: [np] = %d\n', i_component, size_i);
                 i_component = i_component + 1;
                 data_size = data_size + size_i;
@@ -215,8 +208,7 @@ classdef ZoroDescription < handle
                 size_i = dims.nx * dims.nx * (dims.N+1)
                 fprintf('%d) output: concatenation of colmaj(P^k) for i=0,...,N, size: [nx*nx*(N+1)] = %d\n', i_component, size_i);
                 i_component = i_component + 1;
-                % no contribution to data_size here (output only)
-																						  
+                % no contribution to data_size here (output only)																					  
             end
 
             obj.data_size = data_size;
