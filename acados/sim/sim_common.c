@@ -80,19 +80,18 @@ acados_size_t sim_in_calculate_size(void *config_, void *dims)
 
     acados_size_t size = sizeof(sim_in);
 
-    int nx, nu, nz, np = 0, np_global = 0;
+    int nx, nu, nz, np, np_global;
 
     config->dims_get(config_, dims, "nx", &nx);
     config->dims_get(config_, dims, "nu", &nu);
     config->dims_get(config_, dims, "nz", &nz);
-    // optional parameter dimensions
     config->dims_get(config_, dims, "np", &np);
     config->dims_get(config_, dims, "np_global", &np_global);
 
     size += nx * sizeof(double);              // x
     size += nu * sizeof(double);              // u
-    size += np * sizeof(double);              // p        (optional, can be 0)
-    size += np_global * sizeof(double);       // p_global (optional, can be 0)
+    size += np * sizeof(double);              // p        
+    size += np_global * sizeof(double);       // p_global
     size += nx * (nx + nu) * sizeof(double);  // S_forw (max dimension)
     // TODO: S_adj of sim_in is adjoint seed and should be just nx!
     size += (nx + nu) * sizeof(double);       // S_adj

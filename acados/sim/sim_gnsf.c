@@ -78,6 +78,8 @@ void *sim_gnsf_dims_assign(void *config_, void *raw_memory)
     dims->n_out = 0;
     dims->ny = 0;
     dims->nuhat = 0;
+	dims->np = 0;
+    dims->np_global = 0;
 
     assert((char *) raw_memory + sim_gnsf_dims_calculate_size() >= c_ptr);
     return dims;
