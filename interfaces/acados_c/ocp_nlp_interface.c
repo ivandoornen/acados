@@ -1013,11 +1013,11 @@ void ocp_nlp_qp_dims_get_from_attr(ocp_nlp_config *config, ocp_nlp_dims *dims, o
     }
     else if (!strcmp(field, "S_p"))
     {
-        // per-stage parameter sensitivity: [nx1 x np_eff]
-        int np_eff = 0;
-        config->dynamics[stage]->dims_get(config->dynamics[stage], dims->dynamics[stage], "np", &np_eff);
+        // per-stage parameter sensitivity: [nx1 x np]
+        int np = 0;
+        config->dynamics[stage]->dims_get(config->dynamics[stage], dims->dynamics[stage], "np", &np);
         dims_out[0] = dims->nx[stage+1];
-        dims_out[1] = np_eff;
+        dims_out[1] = np;
     }
     // cost
     else if (!strcmp(field, "Q") || !strcmp(field, "relaxed_Q") || !strcmp(field, "P") || !strcmp(field, "relaxed_P"))

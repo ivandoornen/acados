@@ -132,6 +132,17 @@ static void ocp_nlp_dynamics_cont_set_nu1(void *config_, void *dims_, int *nu1)
     dims->nu1 = *nu1;
 }
 
+static void ocp_nlp_dynamics_cont_set_np(void *config_, void *dims_, int *np)
+{
+    ocp_nlp_dynamics_cont_dims *dims = (ocp_nlp_dynamics_cont_dims *) dims_;
+    dims->np = *np;
+
+    ocp_nlp_dynamics_config *dyn_config = (ocp_nlp_dynamics_config *) config_;
+    sim_config *sim_config_ = (sim_config *) dyn_config->sim_solver;
+
+    sim_config_->dims_set(sim_config_, dims->sim, "np", np);
+}
+
 void ocp_nlp_dynamics_cont_dims_set(void *config_, void *dims_, const char *field, int* value)
 {
     if (!strcmp(field, "nx"))
@@ -153,6 +164,10 @@ void ocp_nlp_dynamics_cont_dims_set(void *config_, void *dims_, const char *fiel
     else if (!strcmp(field, "nu1"))
     {
         ocp_nlp_dynamics_cont_set_nu1(config_, dims_, value);
+    }
+	else if (!strcmp(field, "np"))
+    {
+        ocp_nlp_dynamics_cont_set_np(config_, dims_, value);
     }
     else
     {
@@ -184,13 +199,7 @@ void ocp_nlp_dynamics_cont_dims_get(void *config_, void *dims_, const char *fiel
     }
     else if (!strcmp(field, "np"))
     {
-        // return effective np (per-stage or global)
-        ocp_nlp_dynamics_config *dyn_config = (ocp_nlp_dynamics_config *) config_;
-        sim_config *sim_config_ = (sim_config *) dyn_config->sim_solver;
-        int np = 0, np_global = 0;
-        sim_config_->dims_get(sim_config_, dims->sim, "np", &np);
-        sim_config_->dims_get(sim_config_, dims->sim, "np_global", &np_global);
-        *value = (np > 0) ? np : np_global;
+        *value = dims->np;
     }
     else
     {
@@ -387,12 +396,10 @@ acados_size_t ocp_nlp_dynamics_cont_memory_calculate_size(void *config_, void *d
 
     // buffer for parameter sensitivities S_p (nx1 x np_eff)
     {
-        int np = 0, np_global = 0;
+        int np = 0;
         config->sim_solver->dims_get(config->sim_solver, dims->sim, "np", &np);
-        config->sim_solver->dims_get(config->sim_solver, dims->sim, "np_global", &np_global);
-        int np_eff = (np > 0) ? np : np_global;
-        if (np_eff > 0)
-            size += blasfeo_memsize_dmat(dims->nx1, np_eff);
+        if (np > 0)
+            size += blasfeo_memsize_dmat(dims->nx1, np);
     }
     size += 1*64;  // blasfeo_mem align
 
@@ -438,13 +445,11 @@ void *ocp_nlp_dynamics_cont_memory_assign(void *config_, void *dims_, void *opts
    
     // S_p
     {
-        int np = 0, np_global = 0, np_eff = 0;
+        int np = 0;
         config->sim_solver->dims_get(config->sim_solver, dims->sim, "np", &np);
-        config->sim_solver->dims_get(config->sim_solver, dims->sim, "np_global", &np_global);
-        np_eff = (np > 0) ? np : np_global;
-        if (np_eff > 0)
+        if (np > 0)
         {
-            assign_and_advance_blasfeo_dmat_mem(nx1, np_eff, &memory->S_p, &c_ptr);
+            assign_and_advance_blasfeo_dmat_mem(nx1, np, &memory->S_p, &c_ptr);
         }
     }		   
 
@@ -606,17 +611,14 @@ void ocp_nlp_dynamics_cont_memory_get(void *config_, void *dims_, void *mem_, co
     }
 	else if (!strcmp(field, "S_p"))
 	{
-		int np = 0, np_global = 0, np_eff = 0;
+		int np = 0;
 		config->sim_solver->dims_get(config->sim_solver, dims->sim, "np", &np);
-		config->sim_solver->dims_get(config->sim_solver, dims->sim, "np_global", &np_global);
-		np_eff = (np > 0) ? np : np_global;
-		
-		if (np_eff > 0)
+		if (np > 0)
 		{
 			// layout: row-major double[nx1 * np_eff]
 			double *S_p_out = (double *) value;
 			const int nx1 = dims->nx1;
-			blasfeo_unpack_dmat(nx1, np_eff, &mem->S_p, 0, 0, S_p_out, nx1);
+			blasfeo_unpack_dmat(nx1, np, &mem->S_p, 0, 0, S_p_out, nx1);
 		}
 	}	
     else
@@ -866,11 +868,9 @@ void ocp_nlp_dynamics_cont_update_qp_matrices(void *config_, void *dims_, void *
     blasfeo_pack_tran_dmat(nx1, nx, work->sim_out->S_forw + 0, nx1, mem->BAbt, nu, 0);
     // S_p (column-major in sim_out, keep same orientation in BLASFEO)
     {
-        int np = 0, np_global = 0, np_eff = 0;
+        int np = 0;
         config->sim_solver->dims_get(config->sim_solver, dims->sim, "np", &np);
-        config->sim_solver->dims_get(config->sim_solver, dims->sim, "np_global", &np_global);
-        np_eff = (np > 0) ? np : np_global;
-        if (np_eff > 0)
+        if (np > 0)
         {
             bool sens_forw_p = false;
             // only copy if ERK actually computed S_p
@@ -878,12 +878,12 @@ void ocp_nlp_dynamics_cont_update_qp_matrices(void *config_, void *dims_, void *
             if (sens_forw_p)
             {
                 // work->sim_out->S_p: double* with lda = nx1
-                blasfeo_pack_dmat(nx1, np_eff, work->sim_out->S_p, nx1, &mem->S_p, 0, 0);
+                blasfeo_pack_dmat(nx1, np, work->sim_out->S_p, nx1, &mem->S_p, 0, 0);
             }
             else
             {
                 // ensure deterministic contents if S_p was not computed
-                blasfeo_dgese(nx1, np_eff, 0.0, &mem->S_p, 0, 0);
+                blasfeo_dgese(nx1, np, 0.0, &mem->S_p, 0, 0);
             }            
         }
     }	
