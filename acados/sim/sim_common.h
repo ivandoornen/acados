@@ -77,7 +77,6 @@ typedef struct
 	
     /* parameter inputs */
     double *p;         // per-stage parameter (np)  
-    double *p_global;  // global parameter (np_global) 
 
     double *S_forw;  // forward seed [Sx, Su]
     double *S_adj;   // backward seed

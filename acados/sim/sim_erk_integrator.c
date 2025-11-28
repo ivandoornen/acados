@@ -64,7 +64,6 @@ void *sim_erk_dims_assign(void *config_, void *raw_memory)
     dims->nu = 0;
     dims->nz = 0;
     dims->np = 0;
-    dims->np_global = 0;
 
     assert((char *) raw_memory + sim_erk_dims_calculate_size() >= c_ptr);
 
@@ -98,10 +97,6 @@ void sim_erk_dims_set(void *config_, void *dims_, const char *field, const int *
     {
         dims->np = *value;
     }
-    else if (!strcmp(field, "np_global"))
-    {
-        dims->np_global = *value;
-    }
     else
     {
         printf("\nerror: sim_erk_dims_set: dim type not available: %s\n", field);
@@ -130,10 +125,6 @@ void sim_erk_dims_get(void *config_, void *dims_, const char *field, int *value)
     else if (!strcmp(field, "np")) 
 	{ 
 		*value = dims->np; 
-	}
-    else if (!strcmp(field, "np_global")) 
-	{
-		*value = dims->np_global; 
 	}
     else
     {
@@ -429,8 +420,10 @@ acados_size_t sim_erk_workspace_calculate_size(void *config_, void *dims_, void 
     int nu = dims->nu;
     int nf = opts->num_forw_sens;                  // existing (Sx,Su) cols
 	if (!opts->sens_forw) nf = 0;
-    int np_eff = (dims->np > 0) ? dims->np : dims->np_global;
-    int nf_p = ((opts->sens_forw && opts->sens_forw_p && np_eff > 0) ? np_eff : 0);
+	
+	int np   = dims->np;
+	int nf_p = (opts->sens_forw && opts->sens_forw_p && np > 0) ? np : 0;
+	
     int nX = nx * (1 + nf + nf_p);  // x + [Sx,Su] + [S_p]
     int nhess = (nf + 1) * nf / 2;
     int num_steps = opts->num_steps;  // number of steps
@@ -475,13 +468,16 @@ static void *sim_erk_cast_workspace(void *config_, sim_erk_dims *dims, sim_opts 
 {
     int ns = opts->ns;
 
-    int nx = dims->nx;
-    int nu = dims->nu;
-    int nf = opts->num_forw_sens;                  // existing (Sx,Su) cols
+	int nx = dims->nx;
+	int nu = dims->nu;
+	int nf = opts->num_forw_sens;
 	if (!opts->sens_forw) nf = 0;
-    int np_eff = (dims->np > 0) ? dims->np : dims->np_global;
-    int nf_p = ((opts->sens_forw && opts->sens_forw_p && np_eff > 0) ? np_eff : 0);
-    int nX = nx * (1 + nf + nf_p);  // x + [Sx,Su] + [S_p]
+
+	int np   = dims->np;
+	int nf_p = (opts->sens_forw && opts->sens_forw_p && np > 0) ? np : 0;
+
+	int nX = nx * (1 + nf + nf_p);
+
     int nhess = (nf + 1) * nf / 2;
     int num_steps = opts->num_steps;  // number of steps
 
@@ -649,26 +645,25 @@ int sim_erk(void *config_, sim_in *in, sim_out *out, void *opts_, void *mem_, vo
         exit(1);
     }
 
-    int nf = opts->num_forw_sens;
-    if (!opts->sens_forw) nf = 0;
+	int nf = opts->num_forw_sens;
+	if (!opts->sens_forw) nf = 0;
 
-    /* ------------------ parameter-sensitivity (S_p) support ------------------ */
-    /* effective parameter dimension: prefer per-stage np, fall back to np_global */
-    int np_eff = (dims->np > 0) ? dims->np : dims->np_global;
-    /* number of added S_p columns (zero if disabled or no params) */
-    int nf_p   = (opts->sens_forw && opts->sens_forw_p && np_eff > 0) ? np_eff : 0;
+	/* ------------------ parameter-sensitivity (S_p) support ------------------ */
+	/* parameter dimension for S_p uses only stagewise np */
+	int np   = dims->np;
+	int nf_p = (opts->sens_forw && opts->sens_forw_p && np > 0) ? np : 0;
 
-    /* layout:
-     * forw_traj has length nX = nx * (1 + nf + nf_p)
-     * [ x (nx) | S_forw (nx*nf) | S_p (nx*nf_p, optional) ]
-     * rhs_forw_in additionally stores u at the end: [ ... | u (nu) ]
-     */
-    const int off_x  = 0;
-    const int off_Sx = nx;                  /* only meaningful if sens_forw==true */
-    const int off_Su = nx + nx*nx;          /* only meaningful if sens_forw==true */
-    const int off_Sp = nx + nx*nf;          /* append after whole S_forw block */
-    const int nX     = nx * (1 + nf + nf_p);
-    const int off_u  = nX;
+	/* layout:
+	 * forw_traj has length nX = nx * (1 + nf + nf_p)
+	 * [ x (nx) | S_forw (nx*nf) | S_p (nx*nf_p, optional) ]
+	 * rhs_forw_in additionally stores u at the end: [ ... | u (nu) ]
+	 */
+	const int off_x  = 0;
+	const int off_Sx = nx;          // only meaningful if sens_forw
+	const int off_Su = nx + nx*nx;  // only meaningful if sens_forw
+	const int off_Sp = nx + nx*nf;  // only meaningful if nf_p > 0
+	const int nX     = nx * (1 + nf + nf_p);
+	const int off_u  = nX;
 
     int nhess = (nf + 1) * nf / 2;
 
@@ -692,20 +687,18 @@ int sim_erk(void *config_, sim_in *in, sim_out *out, void *opts_, void *mem_, vo
     double *adj_traj = work->adj_traj;
     double *rhs_adj_in = work->rhs_adj_in;
 	
-    double *p_eff = (dims->np > 0) ? in->p : in->p_global;
-
     double *xn = out->xn;
     double *S_forw_out = out->S_forw;
     double *S_adj_out = out->S_adj;
     double *S_hess_out = out->S_hess;
 
-	ext_fun_arg_t ext_fun_type_in[6];
-    void *ext_fun_in[6];					
+	ext_fun_arg_t ext_fun_type_in[5];
+    void *ext_fun_in[5];					
     ext_fun_arg_t ext_fun_type_out[3];
     void *ext_fun_out[3];
 
-    ext_fun_arg_t expl_vde_type_in[6];
-    void *expl_vde_in[6];
+    ext_fun_arg_t expl_vde_type_in[4];
+    void *expl_vde_in[4];
 	
     ext_fun_arg_t expl_vde_type_out[3];
     void *expl_vde_out[3];
@@ -720,8 +713,6 @@ int sim_erk(void *config_, sim_in *in, sim_out *out, void *opts_, void *mem_, vo
         expl_vde_in[2] = rhs_forw_in + off_Su;  // Su: nx*nu
         expl_vde_type_in[3] = COLMAJ;
         expl_vde_in[3] = rhs_forw_in + off_u;   // u: nu
-        expl_vde_type_in[4] = COLMAJ; 
-        expl_vde_in[4] = p_eff;                 // p_eff
 
         expl_vde_type_out[0] = COLMAJ;
         expl_vde_type_out[1] = COLMAJ;
@@ -733,8 +724,6 @@ int sim_erk(void *config_, sim_in *in, sim_out *out, void *opts_, void *mem_, vo
         expl_vde_in[0] = rhs_forw_in + off_x;   // x: nx
         expl_vde_type_in[1] = COLMAJ;
         expl_vde_in[1] = rhs_forw_in + off_u;   // u: nu
-        expl_vde_type_in[2] = COLMAJ; 
-        expl_vde_in[2] = p_eff;                 // p_eff
 
         expl_vde_type_out[0] = COLMAJ;
     }
@@ -756,7 +745,7 @@ int sim_erk(void *config_, sim_in *in, sim_out *out, void *opts_, void *mem_, vo
     // initialize parameter sensitivities block: default to zeros (no warm-start)
     if (nf_p > 0)
     {
-        for (i = 0; i < nx * np_eff; i++) forw_traj[off_Sp + i] = 0.0;
+        for (i = 0; i < nx * nf_p; i++) forw_traj[off_Sp + i] = 0.0;
         // If you later add sim_in->S_p, copy it here instead of zeroing.
     }	
     for (i = 0; i < nu; i++) rhs_forw_in[off_u + i] = u[i];  // controls
@@ -798,27 +787,28 @@ int sim_erk(void *config_, sim_in *in, sim_out *out, void *opts_, void *mem_, vo
 											  
                 // optionally propagate S_p
                 if (nf_p > 0)
-                {
-                    ext_fun_arg_t vdep_type_in[4]  = { COLMAJ, COLMAJ, COLMAJ, COLMAJ };
-                    void *vdep_in[4];
-                    ext_fun_arg_t vdep_type_out[1] = { COLMAJ };
-                    void *vdep_out[1];
+				{
+					ext_fun_arg_t vdep_type_in[3]  = { COLMAJ, COLMAJ, COLMAJ };
+					void *vdep_in[3];
+					ext_fun_arg_t vdep_type_out[1] = { COLMAJ };
+					void *vdep_out[1];
 
-                    vdep_in[0] = rhs_forw_in + off_x;   // x: nx
-                    vdep_in[1] = rhs_forw_in + off_Sp;  // S_p: nx*np_eff
-                    vdep_in[2] = rhs_forw_in + off_u;   // u: nu
-                    vdep_in[3] = p_eff;
+					vdep_in[0] = rhs_forw_in + off_x;   // x: nx
+					vdep_in[1] = rhs_forw_in + off_Sp;  // S_p: nx*np
+					vdep_in[2] = rhs_forw_in + off_u;   // u: nu
 
-                    vdep_out[0] = K_traj + s * nX + off_Sp;  // vdeP: nx*np_eff
+					vdep_out[0] = K_traj + s * nX + off_Sp;  // vdeP: nx*np
 
-                    if (model->expl_vde_for_p == 0) {
-                        printf("sim ERK: expl_vde_for_p is not provided but sens_forw_p=true.\n");
-                        exit(1);
-                    }
-                    model->expl_vde_for_p->evaluate(model->expl_vde_for_p,
-                                                   vdep_type_in, vdep_in,
-                                                   vdep_type_out, vdep_out);
-                }
+					if (model->expl_vde_for_p == 0) {
+						printf("sim ERK: expl_vde_for_p is not provided but sens_forw_p=true.\n");
+						exit(1);
+					}
+
+					model->expl_vde_for_p->evaluate(model->expl_vde_for_p,
+													vdep_type_in, vdep_in,
+													vdep_type_out, vdep_out);
+				}
+
 				
             }
             else
@@ -851,7 +841,7 @@ int sim_erk(void *config_, sim_in *in, sim_out *out, void *opts_, void *mem_, vo
     // store parameter sensitivities
     if (nf_p > 0)
     {
-        for (i = 0; i < nx * np_eff; i++)
+        for (i = 0; i < nx * nf_p; i++)
             out->S_p[i] = forw_traj[off_Sp + i];
     }
 
@@ -933,9 +923,6 @@ int sim_erk(void *config_, sim_in *in, sim_out *out, void *opts_, void *mem_, vo
                     ext_fun_type_in[2] = COLMAJ;
                     ext_fun_in[2] = rhs_adj_in + nx + nx;  // u: nu
 					
-                    ext_fun_type_in[3] = COLMAJ; 
-                    ext_fun_in[3] = p_eff;                  // p_eff
-
                     ext_fun_type_out[0] = COLMAJ;
                     ext_fun_out[0] = adj_traj + s * nAdj + 0;  // adj: nx+nu
 
@@ -960,8 +947,6 @@ int sim_erk(void *config_, sim_in *in, sim_out *out, void *opts_, void *mem_, vo
                     ext_fun_in[3] = rhs_adj_in + nForw;   // lam: nx
                     ext_fun_type_in[4] = COLMAJ;
                     ext_fun_in[4] = rhs_adj_in + nForw + nx;  // u: nu
-                    ext_fun_type_in[5] = COLMAJ; 
-                    ext_fun_in[5] = p_eff;               // p_eff
 
                     ext_fun_type_out[0] = COLMAJ;
                     ext_fun_out[0] = adj_traj + s * nAdj + 0;  // adj: nx+nu

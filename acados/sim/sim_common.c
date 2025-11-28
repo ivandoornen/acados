@@ -80,18 +80,16 @@ acados_size_t sim_in_calculate_size(void *config_, void *dims)
 
     acados_size_t size = sizeof(sim_in);
 
-    int nx, nu, nz, np, np_global;
+    int nx, nu, nz, np;
 
     config->dims_get(config_, dims, "nx", &nx);
     config->dims_get(config_, dims, "nu", &nu);
     config->dims_get(config_, dims, "nz", &nz);
     config->dims_get(config_, dims, "np", &np);
-    config->dims_get(config_, dims, "np_global", &np_global);
 
     size += nx * sizeof(double);              // x
     size += nu * sizeof(double);              // u
     size += np * sizeof(double);              // p        
-    size += np_global * sizeof(double);       // p_global
     size += nx * (nx + nu) * sizeof(double);  // S_forw (max dimension)
     // TODO: S_adj of sim_in is adjoint seed and should be just nx!
     size += (nx + nu) * sizeof(double);       // S_adj
@@ -125,12 +123,11 @@ sim_in *sim_in_assign(void *config_, void *dims, void *raw_memory)
 
     // set pointers and dimensions, defaults
     in->dims = dims;
-    int nx, nu, nz, np = 0, np_global = 0;
+    int nx, nu, nz, np = 0;
     config->dims_get(config_, dims, "nx", &nx);
     config->dims_get(config_, dims, "nu", &nu);
     config->dims_get(config_, dims, "nz", &nz);
     config->dims_get(config_, dims, "np", &np);
-    config->dims_get(config_, dims, "np_global", &np_global);
     int NF = nx + nu;
     in->identity_seed = false;
     in->t0 = 0.0;
@@ -142,7 +139,6 @@ sim_in *sim_in_assign(void *config_, void *dims, void *raw_memory)
     assign_and_advance_double(nx, &in->x, &c_ptr);
     assign_and_advance_double(nu, &in->u, &c_ptr);
     assign_and_advance_double(np, &in->p, &c_ptr);
-    assign_and_advance_double(np_global, &in->p_global, &c_ptr);
     assign_and_advance_double(nx * NF, &in->S_forw, &c_ptr);
     assign_and_advance_double(NF, &in->S_adj, &c_ptr);
 
@@ -171,12 +167,11 @@ void sim_in_assign_and_advance(void *config_, void *dims, sim_in **sim_in_p, cha
 
     // set pointers and dimensions, defaults
     in->dims = dims;
-    int nx, nu, nz, np = 0, np_global = 0;
+    int nx, nu, nz, np = 0;
     config->dims_get(config_, dims, "nx", &nx);
     config->dims_get(config_, dims, "nu", &nu);
     config->dims_get(config_, dims, "nz", &nz);
     config->dims_get(config_, dims, "np", &np);
-    config->dims_get(config_, dims, "np_global", &np_global);
     int NF = nx + nu;
     in->identity_seed = false;
 
@@ -187,7 +182,6 @@ void sim_in_assign_and_advance(void *config_, void *dims, sim_in **sim_in_p, cha
     assign_and_advance_double(nx, &in->x, c_ptr);
     assign_and_advance_double(nu, &in->u, c_ptr);
     assign_and_advance_double(np, &in->p, c_ptr);
-    assign_and_advance_double(np_global, &in->p_global, c_ptr);
     assign_and_advance_double(nx * NF, &in->S_forw, c_ptr);
     assign_and_advance_double(NF, &in->S_adj, c_ptr);
 }
@@ -233,14 +227,6 @@ int sim_in_set_(void *config_, void *dims_, sim_in *in, const char *field, void 
         for (int ii = 0; ii < np; ii++)
             in->p[ii] = p[ii];
     }
-    else if (!strcmp(field, "p_global")) // p_global: horizon-constant parameters
-    {
-        int np_global = 0;
-        config->dims_get(config_, dims_, "np_global", &np_global);
-        double *pg = value;
-        for (int ii = 0; ii < np_global; ii++)
-            in->p_global[ii] = pg[ii];
-    }	
     else if (!strcmp(field, "Sx"))
     {
         // note: this assumes nf = nu+nx !!!
@@ -303,21 +289,18 @@ acados_size_t sim_out_calculate_size(void *config_, void *dims)
 
     acados_size_t size = sizeof(sim_out);
 
-    int nx, nu, nz, np = 0, np_global = 0;
+    int nx, nu, nz, np = 0;
     config->dims_get(config_, dims, "nx", &nx);
     config->dims_get(config_, dims, "nu", &nu);
     config->dims_get(config_, dims, "nz", &nz);
     config->dims_get(config_, dims, "np", &np);
-    config->dims_get(config_, dims, "np_global", &np_global);
-	// effective parameter dimension: prefer stagewise np, fall back to np_global
-    int np_eff = (np > 0) ? np : np_global;
 
     int NF = nx + nu;
     size += sizeof(sim_info);
 
     size += nx * sizeof(double);                // xn
     size += nx * NF * sizeof(double);           // S_forw
-    size += nx * np_eff * sizeof(double);       // S_p (parameter sens, may be 0)
+    size += nx * np * sizeof(double);       // S_p (parameter sens, may be 0)
     size += (nx + nu) * sizeof(double);         // S_adj
     size += (NF * NF) * sizeof(double);         // S_hess
 
@@ -340,13 +323,11 @@ sim_out *sim_out_assign(void *config_, void *dims, void *raw_memory)
 
     char *c_ptr = (char *) raw_memory;
 
-    int nx, nu, nz, np = 0, np_global = 0;
+    int nx, nu, nz, np = 0;
     config->dims_get(config_, dims, "nx", &nx);
     config->dims_get(config_, dims, "nu", &nu);
     config->dims_get(config_, dims, "nz", &nz);
     config->dims_get(config_, dims, "np", &np);
-    config->dims_get(config_, dims, "np_global", &np_global);
-    int np_eff = (np > 0) ? np : np_global;
 
     int NF = nx + nu;
 
@@ -360,7 +341,7 @@ sim_out *sim_out_assign(void *config_, void *dims, void *raw_memory)
 
     assign_and_advance_double(nx, &out->xn, &c_ptr);
     assign_and_advance_double(nx * NF, &out->S_forw, &c_ptr);
-    assign_and_advance_double(nx * np_eff, &out->S_p, &c_ptr);
+    assign_and_advance_double(nx * np, &out->S_p, &c_ptr);
     assign_and_advance_double(nx + nu, &out->S_adj, &c_ptr);
     assign_and_advance_double(NF * NF, &out->S_hess, &c_ptr);
     assign_and_advance_double(NF, &out->grad, &c_ptr);
@@ -408,18 +389,16 @@ int sim_out_get_(void *config_, void *dims_, sim_out *out, const char *field, vo
         for (ii=0; ii < nx*(nu+nx); ii++)
             S_forw[ii] = out->S_forw[ii];
     }
-    else if (!strcmp(field, "S_p"))
-    {
-        // parameter sensitivities: size nx * np_eff, with np_eff = (np>0?np:np_global)
-        int nx, np = 0, np_global = 0, np_eff;
-        config->dims_get(config_, dims_, "nx", &nx);
-        config->dims_get(config_, dims_, "np", &np);
-        config->dims_get(config_, dims_, "np_global", &np_global);
-        np_eff = (np > 0) ? np : np_global;
-        double *S_p = value;
-        for (int ii = 0; ii < nx*np_eff; ii++)
-            S_p[ii] = out->S_p[ii];
-    }
+	else if (!strcmp(field, "S_p"))
+	{
+		// parameter sensitivities: size nx * np
+		int nx, np = 0;
+		config->dims_get(config_, dims_, "nx", &nx);
+		config->dims_get(config_, dims_, "np", &np);
+		double *S_p = value;
+		for (int ii = 0; ii < nx*np; ii++)
+			S_p[ii] = out->S_p[ii];
+	}
     else if (!strcmp(field, "Sx"))
     {
         // note: this assumes nf = nu+nx !!!

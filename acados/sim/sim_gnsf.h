@@ -67,7 +67,6 @@ typedef struct
     int ny; // dimension of first input of phi
     int nuhat; // dimension of second input of phi
     int np;
-    int np_global;
 
 } sim_gnsf_dims;
 

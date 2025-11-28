@@ -47,7 +47,6 @@ typedef struct
     int nu;
     int nz;
     int np;
-    int np_global;
 } sim_erk_dims;
 
 
