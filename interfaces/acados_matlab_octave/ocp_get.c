@@ -115,7 +115,8 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
                                strcmp(field, "qp_Zl") &&
                                strcmp(field, "qpscaling_obj") &&
                                strcmp(field, "qpscaling_constr") &&
-                               strcmp(field, "qp_Zu"))
+                               strcmp(field, "qp_Zu")) &&
+							   strcmp(field, "zoRO_Pk")
         {
             sprintf(buffer, "\nocp_get: invalid stage index, got stage = %d = N, field = %s, field not available at final shooting node\n", stage, field);
             mexErrMsgTxt(buffer);
@@ -473,16 +474,16 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     }
 	else if (!strcmp(field, "S_p"))
 	{
-		/* ocp.get('S_p') -> 1xN cell, ocp.get('S_p', k) -> [nx1 x np_eff] */
+		/* ocp.get('S_p') -> 1xN cell, ocp.get('S_p', k) -> [nx1 x np] */
 		if (nrhs == 2)
 		{
 			mxArray *cell = mxCreateCellMatrix(1, N);
 			plhs[0] = cell;
 			for (int kk = 0; kk < N; kk++)
 			{
-				int nx1    = ocp_nlp_dims_get_from_attr(config, dims, out, kk, "x");
-				int np_eff = ocp_nlp_dims_get_from_attr(config, dims, out, kk, "S_p");
-				mxArray *S = mxCreateDoubleMatrix(nx1, np_eff, mxREAL);
+				int nx1 = ocp_nlp_dims_get_from_attr(config, dims, out, kk,   "pi"); // x_{k+1}
+				int np  = ocp_nlp_dims_get_from_attr(config, dims, out, kk,   "p"); // p_k
+				mxArray *S = mxCreateDoubleMatrix(nx1, np, mxREAL);
 				double *Sp = mxGetPr(S);
 				ocp_nlp_get_at_stage(solver, kk, "S_p", Sp);
 				mxSetCell(cell, kk, S);
@@ -490,9 +491,9 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 		}
 		else if (nrhs == 3)
 		{
-			int nx1    = ocp_nlp_dims_get_from_attr(config, dims, out, stage, "x");
-			int np_eff = ocp_nlp_dims_get_from_attr(config, dims, out, stage, "p");
-			plhs[0] = mxCreateDoubleMatrix(nx1, np_eff, mxREAL);
+			int nx1 = ocp_nlp_dims_get_from_attr(config, dims, out, stage,   "pi"); // x_{k+1}
+			int np  = ocp_nlp_dims_get_from_attr(config, dims, out, stage,   "p"); // p_k
+			plhs[0] = mxCreateDoubleMatrix(nx1, np, mxREAL);
 			double *Sp = mxGetPr(plhs[0]);
 			ocp_nlp_get_at_stage(solver, stage, "S_p", Sp);
 		}

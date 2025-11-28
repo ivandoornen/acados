@@ -69,10 +69,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     int nx; sim_dims_get(config, dims, "nx", &nx);
     int nu; sim_dims_get(config, dims, "nu", &nu);
     int nz; sim_dims_get(config, dims, "nz", &nz);
-    int np=0, np_global=0, np_eff=0;
-    sim_dims_get(config, dims, "np", &np);
-    sim_dims_get(config, dims, "np_global", &np_global);
-    np_eff = (np > 0) ? np : np_global;
+    int np; sim_dims_get(config, dims, "np", &np);
 
     if (!strcmp(field, "xn") || !strcmp(field, "x"))
     {
@@ -123,8 +120,8 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
         sim_out_get(config, dims, out, "S_algebraic", S_algebraic);
     }
     else if (!strcmp(field, "S_p")) 
-    {	// S_p: [nx x np_eff] per-stage parameter sensitivity
-        plhs[0] = mxCreateNumericMatrix(nx, np_eff, mxDOUBLE_CLASS, mxREAL);
+    {	// S_p: [nx x np] per-stage parameter sensitivity
+        plhs[0] = mxCreateNumericMatrix(nx, np, mxDOUBLE_CLASS, mxREAL);
         double *Sp = mxGetPr( plhs[0] );
         sim_out_get(config, dims, out, "S_p", Sp);
     }

@@ -37,8 +37,10 @@ function generate_c_code_explicit_ode(context, model, model_dir)
     %% load model
     x = model.x;
     u = model.u;
+	p = model.p;
     nx = length(x);
     nu = length(u);
+	np = length(p);
     
     % check type
     if isa(x(1), 'casadi.SX')
@@ -47,20 +49,6 @@ function generate_c_code_explicit_ode(context, model, model_dir)
         isSX = false;
     end
     
-    % ---- pick the effective parameter symbol (stagewise p if present, else p_global)
-    if ~isempty(model.p) && numel(model.p) > 0
-        p = model.p;          % stagewise parameters
-    elseif ~isempty(model.p_global) && numel(model.p_global) > 0
-        p = model.p_global;   % global (constant over horizon)
-    else
-        if isSX
-            p = SX([]);       % empty, correct CasADi type
-        else
-            p = MX([]);       % empty, correct CasADi type
-        end
-    end
-    np = length(p);
-
     if isempty(model.f_expl_expr)
         error("Field `f_expl_expr` is required for integrator type ERK.")
     end
@@ -127,7 +115,7 @@ function generate_c_code_explicit_ode(context, model, model_dir)
         context.add_function_definition(fun_name, {x, Sx, Su, lambdaX, u, p}, {adj, hess2}, model_dir, 'dyn');
     end
 
-    % ---- NEW: param-direction forward VDE 
+    % param-direction forward VDE 
     if np > 0 
         fun_name = [model.name,'_expl_vde_forw_p'];
         context.add_function_definition(fun_name, {x, Sp, u, p}, {vdeP}, model_dir, 'dyn');

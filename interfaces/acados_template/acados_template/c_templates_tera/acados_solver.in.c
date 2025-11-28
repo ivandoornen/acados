@@ -584,7 +584,7 @@ void {{ model.name }}_acados_create_setup_functions({{ model.name }}_solver_caps
             MAP_CASADI_FNC(expl_vde_forw[i], {{ model.name }}_expl_vde_forw);
         }
 		
-		{% if dims.np > 0 or dims.np_global > 0 %}
+		{% if dims.np > 0 %}
 		capsule->expl_vde_forw_p = (external_function_external_param_casadi *) malloc(sizeof(external_function_external_param_casadi)*N);
 			for (int i = 0; i < N; i++) {
 				MAP_CASADI_FNC(expl_vde_forw_p[i], {{ model.name }}_expl_vde_forw_p);
@@ -1028,7 +1028,7 @@ void {{ model.name }}_acados_setup_nlp_in({{ model.name }}_solver_capsule* capsu
     {
     {%- if solver_options.integrator_type == "ERK" %}
         ocp_nlp_dynamics_model_set_external_param_fun(nlp_config, nlp_dims, nlp_in, i, "expl_vde_forw", &capsule->expl_vde_forw[i]);
-		{% if dims.np > 0 or dims.np_global > 0 %}
+		{% if dims.np > 0 %}
 			ocp_nlp_dynamics_model_set_external_param_fun(nlp_config, nlp_dims, nlp_in, i, "expl_vde_forw_p", &capsule->expl_vde_forw_p[i]);
         {%- endif %}
 		ocp_nlp_dynamics_model_set_external_param_fun(nlp_config, nlp_dims, nlp_in, i, "expl_ode_fun", &capsule->expl_ode_fun[i]);
@@ -2487,7 +2487,7 @@ static void {{ model.name }}_acados_create_set_opts({{ model.name }}_solver_caps
     bool dynamics_sens_forw_p_val = {{ solver_options.sens_forw_p | default(value="false") }};
     if (dynamics_sens_forw_p_val)
     {
-        dynamics_sens_forw_p_val = ({{ dims.np }} > 0 || {{ dims.np_global }} > 0);
+        dynamics_sens_forw_p_val = ({{ dims.np }} > 0 );
     }
     for (int i = 0; i < N; i++)
     {
@@ -3236,7 +3236,7 @@ int {{ model.name }}_acados_free({{ model.name }}_solver_capsule* capsule)
     for (int i = 0; i < N; i++)
     {
         external_function_external_param_casadi_free(&capsule->expl_vde_forw[i]);
-		{% if dims.np > 0 or dims.np_global > 0 %}
+		{% if dims.np > 0 %}
 			external_function_external_param_casadi_free(&capsule->expl_vde_forw_p[i]);
 		{%- endif %}
         external_function_external_param_casadi_free(&capsule->expl_ode_fun[i]);
@@ -3247,7 +3247,7 @@ int {{ model.name }}_acados_free({{ model.name }}_solver_capsule* capsule)
     }
     free(capsule->expl_vde_adj);
     free(capsule->expl_vde_forw);
-	{% if dims.np > 0 or dims.np_global > 0 %}
+	{% if dims.np > 0 %}
 		free(capsule->expl_vde_forw_p);
 	{%- endif %}
     free(capsule->expl_ode_fun);
