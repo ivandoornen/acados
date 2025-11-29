@@ -133,7 +133,21 @@ for idx = 1:length(targets)
     % delete generated code to avoid failure in examples using similar names
     code_gen_dir = strcat(testpath, "/", dir, "/c_generated_code");
     if exist(code_gen_dir, 'dir')
-        rmdir(code_gen_dir, 's')
+
+        % 1) Make sure no MEX files are in use (Windows can't delete in-use DLLs)
+        clear mex
+
+        % 2) On Windows: remove read-only flag and give write access
+        if ispc
+            % Make all files in c_generated_code writable, recursively
+            [ok, msg, msgid] = fileattrib(fullfile(code_gen_dir, '*'), '+w', 'a', 's');
+            if ~ok
+                warning('fileattrib failed on %s: %s (%s)', code_gen_dir, msg, msgid);
+            end
+        end
+
+        % 3) Now delete the folder
+        rmdir(code_gen_dir, 's');
     end
     close all;
     % clc;
