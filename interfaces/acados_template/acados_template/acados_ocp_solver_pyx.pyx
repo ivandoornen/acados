@@ -401,7 +401,7 @@ cdef class AcadosOcpSolverCython:
         out_fields = ['x', 'u', 'z', 'pi', 'lam', 'sl', 'su']
         in_fields = ['p']
         sens_fields = ['sens_u', 'sens_x']
-        all_fields = out_fields + in_fields + sens_fields + ['S_p']
+        all_fields = out_fields + in_fields + sens_fields + ['S_p', 'zoRO_Pk_mats']
 
         if field_ not in all_fields:
             raise ValueError(f'AcadosOcpSolver.get(stage={stage}, field={field_}): \'{field_}\' is an invalid argument.\
@@ -427,6 +427,17 @@ cdef class AcadosOcpSolverCython:
             
             # Retrieve data from dynamics memory
             acados_solver_common.ocp_nlp_get_at_stage(self.nlp_solver, stage, "S_p".encode('utf-8'), <void *> out_mat.data)
+            return out_mat
+            
+        if field_ == "zoRO_Pk_mats":
+             # Get dimension nx
+            cdef int nx = acados_solver_common.ocp_nlp_dims_get_from_attr(self.nlp_config, self.nlp_dims, self.nlp_out, stage, "x".encode('utf-8'))
+            
+            # Allocate column-major array
+            cdef cnp.ndarray[cnp.float64_t, ndim=2] out_mat = np.zeros((nx, nx), order='F')
+            
+            # Call getter
+            acados_solver_common.ocp_nlp_get_at_stage(self.nlp_solver, stage, "zoRO_Pk_mats".encode('utf-8'), <void *> out_mat.data)
             return out_mat
 
         field = field_
