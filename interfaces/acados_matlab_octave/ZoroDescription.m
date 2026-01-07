@@ -5,6 +5,14 @@ classdef ZoroDescription < handle
 
         feedback_optimization_mode = 'CONSTANT_FEEDBACK'
 
+        parameter_uncertainty_mode = 'CONSTANT'
+        % Type of parameter uncertainty propagation used in zoRO covariance recursion.
+        %
+        % String in: 'CONSTANT', 'IID', 'NONE'
+        % - CONSTANT: fixed parameter error over the horizon (Π Σ_p Π^T formulation)
+        % - IID: stepwise (i.i.d.) parameter uncertainty (S_p Σ_p S_p^T per stage)
+        % - NONE: ignore parameter uncertainty
+
         fdbk_K_mat = []
 
         riccati_Q_const = []
@@ -32,9 +40,6 @@ classdef ZoroDescription < handle
         idx_uh_t = []
         idx_lh_e_t = []
         idx_uh_e_t = []
-
-
-
 
         % streaming options
         input_P0_diag      = false
@@ -141,6 +146,18 @@ classdef ZoroDescription < handle
                     error('The shape of riccati_Q_const_e should be [nx nx].');
                 end
 
+            end
+
+            PARAMETER_UNCERTAINTY_MODES = {'CONSTANT', 'IID', 'NONE'};
+
+            if ~ismember(obj.parameter_uncertainty_mode, PARAMETER_UNCERTAINTY_MODES)
+                error('parameter_uncertainty_mode should be in %s, got %s.', ...
+                    strjoin(PARAMETER_UNCERTAINTY_MODES, ', '), obj.parameter_uncertainty_mode);
+            end
+
+            if (~strcmp(obj.parameter_uncertainty_mode, 'NONE') || obj.input_Sigma_p_diag || obj.input_Sigma_p) && (isempty(obj.np) || obj.np <= 0)
+                error(['Parameter uncertainty or Sigma_p streaming requested, but np is not set. ' ...
+                    'Set obj.np (>0) or provide Sigma_p_mat with correct size so np can be inferred.']);
             end
 
             data_size = 0;

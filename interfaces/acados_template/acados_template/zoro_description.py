@@ -32,6 +32,7 @@ from .acados_dims import AcadosOcpDims
 
 
 FEEDBACK_OPTIMIZATION_MODES = ["CONSTANT_FEEDBACK", "RICCATI_CONSTANT_COST", "RICCATI_BARRIER_1", "RICCATI_BARRIER_2"]
+PARAMETER_UNCERTAINTY_MODES = ["CONSTANT", "IID", "NONE"]
 
 @dataclass
 class ZoroDescription:
@@ -67,6 +68,18 @@ class ZoroDescription:
     - RICCATI_BARRIER_2: feedback gains K computed from a Riccati recursion with barrier contributions added to the variant in RICCATI_CONSTANT_COST, version 2
     """
 
+    parameter_uncertainty_mode: str = "CONSTANT"
+    """Type of parameter uncertainty propagation used in zoRO covariance recursion.
+
+    String in: "CONSTANT", "IID", "NONE"
+
+    - CONSTANT: fixed parameter error over the prediction horizon; parameter uncertainty is propagated via a Π recursion and added as Π Σ_p Π^T.
+    - IID: stepwise (i.i.d.) parameter uncertainty; stage-wise contribution S_p Σ_p S_p^T is added at each step.
+    - NONE: parameter uncertainty is ignored in the covariance propagation.
+
+    By default, CONSTANT is used whenever parameter sensitivities are enabled.
+    """
+
     fdbk_K_mat: np.ndarray = None
     """constant feedback gain matrix K"""
 
@@ -86,7 +99,7 @@ class ZoroDescription:
     W_mat: np.ndarray = None
     """matrix W, covariance of noise in stochastic setting, defines uncertainty ellipsoids in robust setting"""
     Sigma_p_mat: np.ndarray = None
-    """parameter covariance matrix Sigma_p (np x np), used for S_p Sigma_p S_p^T term"""
+    """parameter covariance matrix Sigma_p (zoro_description.np x zoro_description.np), where zoro_description.np is the number of uncertain parameters; used for S_p Sigma_p S_p^T term"""
 
     idx_lbx_t: list = field(default_factory=list)
     """Indices of constraints to be tightened within the lower bounds on x for intermediate shooting nodes 1,...,N-1"""
@@ -213,6 +226,11 @@ class ZoroDescription:
                 self.riccati_Q_const_e = self.riccati_Q_const.copy()
             if self.riccati_Q_const_e.shape != (dims.nx, dims.nx):
                 raise Exception("The shape of riccati_Q_const_e should be [nx*nx].")
+        if self.parameter_uncertainty_mode not in PARAMETER_UNCERTAINTY_MODES:
+            raise Exception(f"parameter_uncertainty_mode should be in {', '.join(PARAMETER_UNCERTAINTY_MODES)}, got {self.parameter_uncertainty_mode}.")
+
+        if (self.parameter_uncertainty_mode != "NONE" or self.input_Sigma_p_diag or self.input_Sigma_p) and (self.np is None or self.np <= 0):
+            raise Exception("Parameter uncertainty or Sigma_p streaming requested, but np is not set. Set obj.np (>0) or provide Sigma_p_mat with correct size so np can be inferred.")
 
         # Print input note:
         print(f"\nThe data of the generated custom update function consists of the concatenation of:")
