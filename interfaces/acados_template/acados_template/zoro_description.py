@@ -229,8 +229,8 @@ class ZoroDescription:
         if self.parameter_uncertainty_mode not in PARAMETER_UNCERTAINTY_MODES:
             raise Exception(f"parameter_uncertainty_mode should be in {', '.join(PARAMETER_UNCERTAINTY_MODES)}, got {self.parameter_uncertainty_mode}.")
 
-        if (self.parameter_uncertainty_mode != "NONE" or self.input_Sigma_p_diag or self.input_Sigma_p) and (self.np is None or self.np <= 0):
-            raise Exception("Parameter uncertainty or Sigma_p streaming requested, but np is not set. Set obj.np (>0) or provide Sigma_p_mat with correct size so np can be inferred.")
+        if (self.input_Sigma_p_diag or self.input_Sigma_p) and (self.np is None or self.np <= 0):
+            raise Exception("Sigma_p streaming requested, but np is not set. Set obj.np (>0) or provide Sigma_p_mat with correct size so np can be inferred.")
 
         # Print input note:
         print(f"\nThe data of the generated custom update function consists of the concatenation of:")
