@@ -60,6 +60,9 @@ function generate_c_code_nonlinear_constr(context, model, target_dir, stage_type
         % generate jacobians
         jac_ux_0 = jacobian(h_0, [u; x]);
         jac_z_0  = jacobian(h_0, z);
+		if context.opts.sens_forw_p
+			jac_p_0  = jacobian(h_0, p);
+		end
 
         % generate hessian
         adj_ux_0 = jtimes(h_0, [u; x], lam_h_0, true);
@@ -71,7 +74,10 @@ function generate_c_code_nonlinear_constr(context, model, target_dir, stage_type
         % add functions to context
         context.add_function_definition([model.name,'_constr_h_0_fun'], {x, u, z, p}, {h_0}, target_dir, 'constr');
         context.add_function_definition([model.name,'_constr_h_0_fun_jac_uxt_zt'], {x, u, z, p}, {h_0, jac_ux_0', jac_z_0'}, target_dir, 'constr');
-        if context.opts.generate_hess
+		if context.opts.sens_forw_p	
+			context.add_function_definition([model.name,'_constr_h_0_jac_p'], {x, u, z, p}, {jac_p_0}, target_dir, 'constr');
+		end
+		if context.opts.generate_hess
             context.add_function_definition([model.name,'_constr_h_0_fun_jac_uxt_zt_hess'], {x, u, lam_h_0, z, p}, {h_0, jac_ux_0', hess_ux_0, jac_z_0', hess_z_0}, target_dir, 'constr');
         end
 
@@ -89,6 +95,9 @@ function generate_c_code_nonlinear_constr(context, model, target_dir, stage_type
         % generate jacobians
         jac_ux = jacobian(h, [u; x]);
         jac_z  = jacobian(h, z);
+		if context.opts.sens_forw_p
+			jac_p = jacobian(h, p);
+		end
         % generate hessian
         ux = [u; x];
         adj_ux = jtimes(h, ux, lam_h, true);
@@ -101,7 +110,9 @@ function generate_c_code_nonlinear_constr(context, model, target_dir, stage_type
         % add functions to context
         context.add_function_definition([model.name,'_constr_h_fun'], {x, u, z, p}, {h}, target_dir, 'constr');
         context.add_function_definition([model.name,'_constr_h_fun_jac_uxt_zt'], {x, u, z, p}, {h, jac_ux', jac_z'}, target_dir, 'constr');
-
+		if context.opts.sens_forw_p
+			context.add_function_definition([model.name,'_constr_h_jac_p'], {x, u, z, p}, {jac_p}, target_dir, 'constr');
+		end
         if context.opts.generate_hess
             context.add_function_definition([model.name,'_constr_h_fun_jac_uxt_zt_hess'],...
                                     {x, u, lam_h, z, p}, {h, jac_ux', hess_ux, jac_z', hess_z}, target_dir, 'constr');

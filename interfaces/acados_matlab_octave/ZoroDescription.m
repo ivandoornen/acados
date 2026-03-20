@@ -38,6 +38,8 @@ classdef ZoroDescription < handle
         idx_ug_e_t = []
         idx_lh_t = []
         idx_uh_t = []
+        idx_lh_0_t = []
+        idx_uh_0_t = []        
         idx_lh_e_t = []
         idx_uh_e_t = []
 
@@ -67,6 +69,8 @@ classdef ZoroDescription < handle
         nug_e_t
         nlh_t
         nuh_t
+        nlh_0_t
+        nuh_0_t        
         nlh_e_t
         nuh_e_t
         data_size
@@ -97,6 +101,8 @@ classdef ZoroDescription < handle
             obj.nug_e_t = numel(obj.idx_ug_e_t);
             obj.nlh_t = numel(obj.idx_lh_t);
             obj.nuh_t = numel(obj.idx_uh_t);
+            obj.nlh_0_t = numel(obj.idx_lh_0_t);
+            obj.nuh_0_t = numel(obj.idx_uh_0_t);            
             obj.nlh_e_t = numel(obj.idx_lh_e_t);
             obj.nuh_e_t = numel(obj.idx_uh_e_t);
 
@@ -257,16 +263,15 @@ classdef ZoroDescription < handle
             end
         end
 
-        function s = convert_to_struct_for_json_dump(self, N)
+	    function s = convert_to_struct_for_json_dump(self, N)
             s = self.to_struct();
             s = prepare_struct_for_json_dump(s, {
-
                 'idx_lbx_t', 'idx_ubx_t', 'idx_lbx_e_t', 'idx_ubx_e_t', ...
                 'idx_lbu_t', 'idx_ubu_t', 'idx_lg_t', 'idx_ug_t', ...
                 'idx_lg_e_t', 'idx_ug_e_t', 'idx_lh_t', 'idx_uh_t', ...
+                'idx_lh_0_t', 'idx_uh_0_t', ...
                 'idx_lh_e_t', 'idx_uh_e_t'}, {
                     'fdbk_K_mat', 'unc_jac_G_mat', 'P0_mat', 'W_mat', 'Sigma_p_mat'});
-
         end
     end
 end
