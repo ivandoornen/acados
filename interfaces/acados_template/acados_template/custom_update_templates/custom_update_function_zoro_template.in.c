@@ -202,6 +202,28 @@ typedef struct custom_memory
     int *idxbu;                                          // shape = (nbu,)
     int *idxbx_e;                                        // shape = (nbx_e,)
 
+{%- if zoro_description.nlh_0_t + zoro_description.nuh_0_t > 0 %}
+    // Stage 0 parameter Jacobian and BLASFEO variance buffers
+    struct blasfeo_dmat dhdp_0_mat;                      // shape = (nh_0, np)
+    struct blasfeo_dmat temp_h0_mat;                     // shape = (nh_0, np)
+    struct blasfeo_dmat var_h0_mat;                      // shape = (nh_0, nh_0)
+    int *h0_jacp_iw;
+    double *h0_jacp_w;
+    const double **h0_jacp_arg;
+    double **h0_jacp_res;
+    double *h0_jacp_J_sparse;
+    double *d_dhdp_0_mat;
+    int h0_jacp_sz_arg;
+    int h0_jacp_sz_res;
+    int h0_jacp_sz_iw;
+    int h0_jacp_sz_w;
+    int h0_jacp_nnz;
+    const int *h0_jacp_colind;
+    const int *h0_jacp_row;
+    int h0_jacp_nrow;
+    int h0_jacp_ncol;
+{%- endif %}
+
     int offset_W_diag;
     int offset_W_add_diag;
     int offset_Sigma_p;
@@ -322,6 +344,22 @@ static int custom_memory_calculate_size(ocp_nlp_config *nlp_config, ocp_nlp_dims
     size += 5 * (nbx_e + ng_e + nh_e)*sizeof(double);
     size += 4 * nh_0 * sizeof(double);
     size += (nbx + nbu + nbx_e)*sizeof(int);        // idxbx, idxbu, idxbx_e
+
+{%- if zoro_description.nlh_0_t + zoro_description.nuh_0_t > 0 %}
+    int sz_arg_0, sz_res_0, sz_iw_0, sz_w_0;
+    {{ model.name }}_constr_h_0_jac_p_work(&sz_arg_0, &sz_res_0, &sz_iw_0, &sz_w_0);
+    const int *sp_0 = {{ model.name }}_constr_h_0_jac_p_sparsity_out(0);
+    int nnz_0 = sp_0[2 + sp_0[1]];
+
+    size += 2 * blasfeo_memsize_dmat(nh_0, np);       // dhdp_0_mat, temp_h0_mat
+    size += blasfeo_memsize_dmat(nh_0, nh_0);         // var_h0_mat
+    size += (sz_iw_0 > 0 ? sz_iw_0 : 1) * sizeof(int);
+    size += (sz_w_0 > 0 ? sz_w_0 : 1) * sizeof(double);
+    size += (sz_arg_0 > 0 ? sz_arg_0 : 1) * sizeof(const double *);
+    size += (sz_res_0 > 0 ? sz_res_0 : 1) * sizeof(double *);
+    size += (nnz_0 > 0 ? nnz_0 : 1) * sizeof(double); // h0_jacp_J_sparse
+    size += (nh_0 * np) * sizeof(double);             // d_dhdp_0_mat
+{%- endif %}
 
     size += 1 * 8; // initial alignment
     make_int_multiple_of(64, &size);
@@ -489,6 +527,42 @@ static custom_memory *custom_memory_assign(ocp_nlp_config *nlp_config, ocp_nlp_d
     assign_and_advance_double(nh_0, &mem->d_uh_0_tightened, &c_ptr);
     assign_and_advance_double(nbu + nbx + ng + nh, &mem->d_ineq_val, &c_ptr);
     assign_and_advance_double(nbx_e + ng_e + nh_e, &mem->d_ineq_e_val, &c_ptr);
+
+{%- if zoro_description.nlh_0_t + zoro_description.nuh_0_t > 0 %}
+    assign_and_advance_blasfeo_dmat_mem(nh_0, np, &mem->dhdp_0_mat, &c_ptr);
+    assign_and_advance_blasfeo_dmat_mem(nh_0, np, &mem->temp_h0_mat, &c_ptr);
+    assign_and_advance_blasfeo_dmat_mem(nh_0, nh_0, &mem->var_h0_mat, &c_ptr);
+
+    int sz_arg_0, sz_res_0, sz_iw_0, sz_w_0;
+    {{ model.name }}_constr_h_0_jac_p_work(&sz_arg_0, &sz_res_0, &sz_iw_0, &sz_w_0);
+    mem->h0_jacp_sz_arg = sz_arg_0; mem->h0_jacp_sz_res = sz_res_0;
+    mem->h0_jacp_sz_iw = sz_iw_0; mem->h0_jacp_sz_w = sz_w_0;
+
+    const int *sp_0 = {{ model.name }}_constr_h_0_jac_p_sparsity_out(0);
+    mem->h0_jacp_nrow = sp_0[0];
+    mem->h0_jacp_ncol = sp_0[1];
+    mem->h0_jacp_colind = sp_0 + 2;
+    mem->h0_jacp_row = sp_0 + 2 + mem->h0_jacp_ncol + 1;
+    mem->h0_jacp_nnz = mem->h0_jacp_colind[mem->h0_jacp_ncol];
+
+    assign_and_advance_int(sz_iw_0 > 0 ? sz_iw_0 : 1, &mem->h0_jacp_iw, &c_ptr);
+    assign_and_advance_double(sz_w_0 > 0 ? sz_w_0 : 1, &mem->h0_jacp_w, &c_ptr);
+
+    align_char_to(8, &c_ptr);
+    mem->h0_jacp_arg = (const double **) c_ptr;
+    c_ptr += (sz_arg_0 > 0 ? sz_arg_0 : 1) * sizeof(const double *);
+    mem->h0_jacp_res = (double **) c_ptr;
+    c_ptr += (sz_res_0 > 0 ? sz_res_0 : 1) * sizeof(double *);
+
+    assign_and_advance_double(mem->h0_jacp_nnz > 0 ? mem->h0_jacp_nnz : 1, &mem->h0_jacp_J_sparse, &c_ptr);
+    assign_and_advance_double(nh_0 * np, &mem->d_dhdp_0_mat, &c_ptr);
+
+    for (int k = 0; k < (sz_iw_0 > 0 ? sz_iw_0 : 1); k++) mem->h0_jacp_iw[k] = 0;
+    for (int k = 0; k < (sz_w_0 > 0 ? sz_w_0 : 1); k++) mem->h0_jacp_w[k] = 0.0;
+    for (int i = 0; i < sz_arg_0; i++) mem->h0_jacp_arg[i] = NULL;
+    for (int i = 0; i < sz_res_0; i++) mem->h0_jacp_res[i] = NULL;
+    if (sz_res_0 > 0) mem->h0_jacp_res[0] = mem->h0_jacp_J_sparse;
+{%- endif %}
 
     assign_and_advance_int(nbx, &mem->idxbx, &c_ptr);
     assign_and_advance_int(nbu, &mem->idxbu, &c_ptr);
@@ -1359,132 +1433,65 @@ static void uncertainty_propagate_and_update(ocp_nlp_solver *solver, ocp_nlp_in 
     // NOTE: lg_0 and ug_0 are not tightened.
     // NOTE:
 
-{%- if zoro_description.nlh_t + zoro_description.nuh_t > 0 %}
+{%- if zoro_description.nlh_0_t + zoro_description.nuh_0_t > 0 %}
 {%- if solver_options.sens_forw_p and dims.nh_0 > 0 and dims.np > 0 %}
     {
         // 1. Fetch current operating point
         double current_x[nx]; double current_u[nu]; double current_p[np];
         ocp_nlp_out_get(nlp_config, nlp_dims, nlp_out, 0, "x", current_x);
         ocp_nlp_out_get(nlp_config, nlp_dims, nlp_out, 0, "u", current_u);
-        ocp_nlp_in_get(nlp_config, nlp_dims, nlp_in, 0, "p", current_p); // Live gammas
+        ocp_nlp_in_get(nlp_config, nlp_dims, nlp_in, 0, "p", current_p);
 
-        // --- NEW: Fetch the TRUE global data pointer from acados memory ---
-        // This array contains your 7 parameters PLUS CasADi's internal magic constants.
         double *true_p_global = nlp_in->global_data;
-        // ------------------------------------------------------------------
-
         double dummy_z[1] = {0.0};
 
-        // --- TELEMETRY LOGGING SETUP ---
-        // static int zoro_log_count = 0;
-        // int print_telemetry = (zoro_log_count < 800);
-        // FILE *fp = NULL;
-        // if (print_telemetry) {
-        //     fp = fopen("zoro_debug.log", "a");
-        // }
-        // -------------------------------
+        // 2. Map arguments correctly for split p and p_global using preallocated array
+        if (custom_mem->h0_jacp_sz_arg > 0) custom_mem->h0_jacp_arg[0] = current_x;
+        if (custom_mem->h0_jacp_sz_arg > 1) custom_mem->h0_jacp_arg[1] = current_u;
+        if (custom_mem->h0_jacp_sz_arg > 2) custom_mem->h0_jacp_arg[2] = dummy_z;
+        if (custom_mem->h0_jacp_sz_arg > 3) custom_mem->h0_jacp_arg[3] = current_p;
+        if (custom_mem->h0_jacp_sz_arg > 4) custom_mem->h0_jacp_arg[4] = true_p_global;
 
-        // 2. Query REQUIRED sizes
-        int sz_arg, sz_res, sz_iw, sz_w;
-        {{ model.name }}_constr_h_0_jac_p_work(&sz_arg, &sz_res, &sz_iw, &sz_w);
+        // 3. Zero-out sparse and dense parameter Jacobian buffers
+        for(int k = 0; k < (custom_mem->h0_jacp_nnz > 0 ? custom_mem->h0_jacp_nnz : 1); k++) custom_mem->h0_jacp_J_sparse[k] = 0.0;
+        for(int k = 0; k < ({{ dims.nh_0 }} * np); k++) custom_mem->d_dhdp_0_mat[k] = 0.0;
 
-        // 3. Allocate and zero-initialize workspace
-        int iw[sz_iw > 0 ? sz_iw : 1];
-        double w[sz_w > 0 ? sz_w : 1];
-        for (int k = 0; k < (sz_iw > 0 ? sz_iw : 1); k++) iw[k] = 0;
-        for (int k = 0; k < (sz_w > 0 ? sz_w : 1); k++) w[k] = 0.0;
+        // 4. Evaluate Stage 0 parameter Jacobian SAFELY
+        {{ model.name }}_constr_h_0_jac_p(custom_mem->h0_jacp_arg, custom_mem->h0_jacp_res, custom_mem->h0_jacp_iw, custom_mem->h0_jacp_w, NULL);
 
-        const double *arg[sz_arg > 0 ? sz_arg : 1];
-        double *res[sz_res > 0 ? sz_res : 1];
-
-        for (int i = 0; i < sz_arg; i++) arg[i] = NULL;
-        for (int i = 0; i < sz_res; i++) res[i] = NULL;
-
-        // 5. Query sparsity pattern to unpack sparse CasADi output
-        const int *sp = {{ model.name }}_constr_h_0_jac_p_sparsity_out(0);
-        int nrow = sp[0];
-        int ncol = sp[1];
-        const int *colind = sp + 2;
-        const int *row = sp + 2 + ncol + 1;
-        int nnz = colind[ncol];
-
-        double J_sparse[nnz > 0 ? nnz : 1];
-        for(int k=0; k<(nnz > 0 ? nnz : 1); k++) J_sparse[k] = 0.0;
-
-        if (sz_res > 0) res[0] = J_sparse;
-
-        // 6. Map arguments correctly for split p and p_global
-        if (sz_arg > 0) arg[0] = current_x;
-        if (sz_arg > 1) arg[1] = current_u;
-        if (sz_arg > 2) arg[2] = dummy_z;
-        if (sz_arg > 3) arg[3] = current_p;       // Local params (gamma)
-        if (sz_arg > 4) arg[4] = true_p_global;   // The TRUE global pointer
-
-        // Evaluate Stage 0 parameter Jacobian SAFELY
-        {{ model.name }}_constr_h_0_jac_p(arg, res, iw, w, NULL);
-
-        // --- UNPACK SPARSE TO DENSE ---
-        double dhdp_mat[{{ dims.nh_0 }} * np];
-        for (int k = 0; k < ({{ dims.nh_0 }} * np); k++) dhdp_mat[k] = 0.0;
-
-        for (int i = 0; i < ncol; i++) {
+        // 5. Unpack sparse CasADi output into dense array using cached sparsity pattern
+        for (int i = 0; i < custom_mem->h0_jacp_ncol; i++) {
             if (i >= np) break; // Only unpack gamma derivatives
-            for (int k = colind[i]; k < colind[i+1]; k++) {
-                int r = row[k];
-                dhdp_mat[r + i * nrow] = J_sparse[k];
+            for (int k = custom_mem->h0_jacp_colind[i]; k < custom_mem->h0_jacp_colind[i+1]; k++) {
+                int r = custom_mem->h0_jacp_row[k];
+                custom_mem->d_dhdp_0_mat[r + i * custom_mem->h0_jacp_nrow] = custom_mem->h0_jacp_J_sparse[k];
             }
         }
 
-        // // 7. Telemetry Dump
-        // if (fp) {
-        //     fprintf(fp, "\n--- zoRO Stage 0 Call %d ---\n", zoro_log_count);
+        // 6. Pack dense array into BLASFEO matrix
+        blasfeo_pack_dmat({{ dims.nh_0 }}, np, custom_mem->d_dhdp_0_mat, {{ dims.nh_0 }}, &custom_mem->dhdp_0_mat, 0, 0);
 
-        //     // Dump Controls
-        //     fprintf(fp, "Inputs u: [");
-        //     for(int i=0; i<nu; i++) fprintf(fp, "%.4f%s", current_u[i], i==(nu-1) ? "" : ", ");
-        //     fprintf(fp, "]\n");
+        // 7. Compute Variance: var_h0 = J_p @ Sigma_p @ J_p^T
+        // temp_h0_mat = dhdp_0_mat @ Sigma_p_mat
+        blasfeo_dgemm_nn({{ dims.nh_0 }}, np, np, 1.0, &custom_mem->dhdp_0_mat, 0, 0,
+                         &custom_mem->Sigma_p_mat, 0, 0, 0.0,
+                         &custom_mem->temp_h0_mat, 0, 0, &custom_mem->temp_h0_mat, 0, 0);
 
-        //     // Dump States
-        //     fprintf(fp, "States x: [");
-        //     for(int i=0; i<nx; i++) fprintf(fp, "%.4f%s", current_x[i], i==(nx-1) ? "" : ", ");
-        //     fprintf(fp, "]\n");
+        // var_h0_mat = temp_h0_mat @ dhdp_0_mat^T
+        blasfeo_dgemm_nt({{ dims.nh_0 }}, {{ dims.nh_0 }}, np, 1.0, &custom_mem->temp_h0_mat, 0, 0,
+                         &custom_mem->dhdp_0_mat, 0, 0, 0.0,
+                         &custom_mem->var_h0_mat, 0, 0, &custom_mem->var_h0_mat, 0, 0);
 
-        //     // Dump the TRUE Global Data
-        //     fprintf(fp, "True p_global: [");
-        //     // Assuming CasADi didn't add more than 10 internal constants.
-        //     for(int i=0; i<({{ dims.np_global }} + 5); i++) {
-        //         fprintf(fp, "%.4f%s", true_p_global[i], i==({{ dims.np_global }}+4) ? "" : ", ");
-        //     }
-        //     fprintf(fp, "]\n");
-        // }
-
-        // 8. Compute Variance
+        // 8. Extract diagonal variance and apply backoff scaling
         for (int r = 0; r < {{ dims.nh_0 }}; r++) {
-            double var_r = 0.0;
-            for (int i = 0; i < np; i++) {
-                for (int j = 0; j < np; j++) {
-                    double J_ri = dhdp_mat[r + i * {{ dims.nh_0 }}];
-                    double J_rj = dhdp_mat[r + j * {{ dims.nh_0 }}];
-                    double Sig_ij = BLASFEO_DMATEL(&custom_mem->Sigma_p_mat, i, j);
-                    var_r += J_ri * Sig_ij * J_rj;
-                }
-            }
-
+            double var_r = BLASFEO_DMATEL(&custom_mem->var_h0_mat, r, r);
             double scaled_var = var_r * backoff_scaling_gamma * backoff_scaling_gamma;
-            custom_mem->ineq_backoff_sq_buffer[0].pa[nbu + nbx + ng + r] = scaled_var;
-
-            // if (fp) {
-            //     // Print the raw Jacobian row to see exactly which derivative blew up
-            //     fprintf(fp, "  Constr %d | var_r: %12.4e | J_row: [", r, var_r);
-            //     for(int i=0; i<np; i++) {
-            //         fprintf(fp, "%12.4e%s", dhdp_mat[r + i * {{ dims.nh_0 }}], i==(np-1) ? "" : ", ");
-            //     }
-            //     fprintf(fp, "]\n");
-            // }
+            // Replaced .pa bypass with proper BLASFEO API
+            blasfeo_dvecin1(scaled_var, &custom_mem->ineq_backoff_sq_buffer[0], nbu + nbx + ng + r);
         }
 
-        // Apply Tightened Bounds
-        double current_backoff = 0.0; // Declare once outside loops to avoid redefinition
+        // 9. Apply Tightened Bounds
+        double current_backoff = 0.0;
 
         {%- if zoro_description.nlh_0_t > 0 %}
         {%- for it in zoro_description.idx_lh_0_t %}
@@ -1498,17 +1505,9 @@ static void uncertainty_propagate_and_update(ocp_nlp_solver *solver, ocp_nlp_in 
         {%- for it in zoro_description.idx_uh_0_t %}
         current_backoff = sqrt(blasfeo_dvecex1(&custom_mem->ineq_backoff_sq_buffer[0], nbu + nbx + ng + {{it}}));
         custom_mem->d_uh_0_tightened[{{it}}] = custom_mem->d_uh_0[{{it}}] - current_backoff;
-        // if (fp) {
-        //     fprintf(fp, "  UB_0 %d | Backoff: %.4f | New Bound: %.4f\n", {{it}}, current_backoff, custom_mem->d_uh_0_tightened[{{it}}]);
-        // }
         {%- endfor %}
         ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, nlp_out, 0, "uh", custom_mem->d_uh_0_tightened);
         {%- endif %}
-
-        // if (fp) {
-        //     fclose(fp);
-        //     zoro_log_count++;
-        // }
     }
 {%- endif %}
 {%- endif %}

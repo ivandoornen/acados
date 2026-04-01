@@ -39,7 +39,7 @@ classdef ZoroDescription < handle
         idx_lh_t = []
         idx_uh_t = []
         idx_lh_0_t = []
-        idx_uh_0_t = []        
+        idx_uh_0_t = []
         idx_lh_e_t = []
         idx_uh_e_t = []
 
@@ -70,7 +70,7 @@ classdef ZoroDescription < handle
         nlh_t
         nuh_t
         nlh_0_t
-        nuh_0_t        
+        nuh_0_t
         nlh_e_t
         nuh_e_t
         data_size
@@ -102,7 +102,7 @@ classdef ZoroDescription < handle
             obj.nlh_t = numel(obj.idx_lh_t);
             obj.nuh_t = numel(obj.idx_uh_t);
             obj.nlh_0_t = numel(obj.idx_lh_0_t);
-            obj.nuh_0_t = numel(obj.idx_uh_0_t);            
+            obj.nuh_0_t = numel(obj.idx_uh_0_t);
             obj.nlh_e_t = numel(obj.idx_lh_e_t);
             obj.nuh_e_t = numel(obj.idx_uh_e_t);
 
