@@ -224,6 +224,31 @@ typedef struct custom_memory
     int h0_jacp_ncol;
 {%- endif %}
 
+{%- if zoro_description.nlh_t + zoro_description.nuh_t > 0 %}
+    // Path-stage parameter Jacobian and BLASFEO variance buffers
+    struct blasfeo_dmat dhdp_h_mat;                      // shape = (nh, np)
+    struct blasfeo_dmat Jtot_h_mat;                      // shape = (nh, np)
+    struct blasfeo_dmat temp_h_mat;                      // shape = (nh, np)
+    struct blasfeo_dmat var_h_mat;                       // shape = (nh, nh)
+
+    int *h_jacp_iw;
+    double *h_jacp_w;
+    const double **h_jacp_arg;
+    double **h_jacp_res;
+    double *h_jacp_J_sparse;
+    double *d_dhdp_h_mat;
+
+    int h_jacp_sz_arg;
+    int h_jacp_sz_res;
+    int h_jacp_sz_iw;
+    int h_jacp_sz_w;
+    int h_jacp_nnz;
+    const int *h_jacp_colind;
+    const int *h_jacp_row;
+    int h_jacp_nrow;
+    int h_jacp_ncol;
+{%- endif %}
+
     int offset_W_diag;
     int offset_W_add_diag;
     int offset_Sigma_p;
@@ -359,6 +384,22 @@ static int custom_memory_calculate_size(ocp_nlp_config *nlp_config, ocp_nlp_dims
     size += (sz_res_0 > 0 ? sz_res_0 : 1) * sizeof(double *);
     size += (nnz_0 > 0 ? nnz_0 : 1) * sizeof(double); // h0_jacp_J_sparse
     size += (nh_0 * np) * sizeof(double);             // d_dhdp_0_mat
+{%- endif %}
+
+{%- if zoro_description.nlh_t + zoro_description.nuh_t > 0 %}
+    int sz_arg_h, sz_res_h, sz_iw_h, sz_w_h;
+    {{ model.name }}_constr_h_jac_p_work(&sz_arg_h, &sz_res_h, &sz_iw_h, &sz_w_h);
+    const int *sp_h = {{ model.name }}_constr_h_jac_p_sparsity_out(0);
+    int nnz_h = sp_h[2 + sp_h[1]];
+
+    size += 3 * blasfeo_memsize_dmat(nh, np);       // dhdp_h_mat, Jtot_h_mat, temp_h_mat
+    size += blasfeo_memsize_dmat(nh, nh);           // var_h_mat
+    size += (sz_iw_h > 0 ? sz_iw_h : 1) * sizeof(int);
+    size += (sz_w_h > 0 ? sz_w_h : 1) * sizeof(double);
+    size += (sz_arg_h > 0 ? sz_arg_h : 1) * sizeof(const double *);
+    size += (sz_res_h > 0 ? sz_res_h : 1) * sizeof(double *);
+    size += (nnz_h > 0 ? nnz_h : 1) * sizeof(double);   // h_jacp_J_sparse
+    size += (nh * np) * sizeof(double);                 // d_dhdp_h_mat
 {%- endif %}
 
     size += 1 * 8; // initial alignment
@@ -562,6 +603,43 @@ static custom_memory *custom_memory_assign(ocp_nlp_config *nlp_config, ocp_nlp_d
     for (int i = 0; i < sz_arg_0; i++) mem->h0_jacp_arg[i] = NULL;
     for (int i = 0; i < sz_res_0; i++) mem->h0_jacp_res[i] = NULL;
     if (sz_res_0 > 0) mem->h0_jacp_res[0] = mem->h0_jacp_J_sparse;
+{%- endif %}
+
+{%- if zoro_description.nlh_t + zoro_description.nuh_t > 0 %}
+    assign_and_advance_blasfeo_dmat_mem(nh, np, &mem->dhdp_h_mat, &c_ptr);
+    assign_and_advance_blasfeo_dmat_mem(nh, np, &mem->Jtot_h_mat, &c_ptr);
+    assign_and_advance_blasfeo_dmat_mem(nh, np, &mem->temp_h_mat, &c_ptr);
+    assign_and_advance_blasfeo_dmat_mem(nh, nh, &mem->var_h_mat, &c_ptr);
+
+    int sz_arg_h, sz_res_h, sz_iw_h, sz_w_h;
+    {{ model.name }}_constr_h_jac_p_work(&sz_arg_h, &sz_res_h, &sz_iw_h, &sz_w_h);
+    mem->h_jacp_sz_arg = sz_arg_h; mem->h_jacp_sz_res = sz_res_h;
+    mem->h_jacp_sz_iw = sz_iw_h;   mem->h_jacp_sz_w = sz_w_h;
+
+    const int *sp_h = {{ model.name }}_constr_h_jac_p_sparsity_out(0);
+    mem->h_jacp_nrow = sp_h[0];
+    mem->h_jacp_ncol = sp_h[1];
+    mem->h_jacp_colind = sp_h + 2;
+    mem->h_jacp_row = sp_h + 2 + mem->h_jacp_ncol + 1;
+    mem->h_jacp_nnz = mem->h_jacp_colind[mem->h_jacp_ncol];
+
+    assign_and_advance_int(sz_iw_h > 0 ? sz_iw_h : 1, &mem->h_jacp_iw, &c_ptr);
+    assign_and_advance_double(sz_w_h > 0 ? sz_w_h : 1, &mem->h_jacp_w, &c_ptr);
+
+    align_char_to(8, &c_ptr);
+    mem->h_jacp_arg = (const double **) c_ptr;
+    c_ptr += (sz_arg_h > 0 ? sz_arg_h : 1) * sizeof(const double *);
+    mem->h_jacp_res = (double **) c_ptr;
+    c_ptr += (sz_res_h > 0 ? sz_res_h : 1) * sizeof(double *);
+
+    assign_and_advance_double(mem->h_jacp_nnz > 0 ? mem->h_jacp_nnz : 1, &mem->h_jacp_J_sparse, &c_ptr);
+    assign_and_advance_double(nh * np, &mem->d_dhdp_h_mat, &c_ptr);
+
+    for (int k = 0; k < (sz_iw_h > 0 ? sz_iw_h : 1); k++) mem->h_jacp_iw[k] = 0;
+    for (int k = 0; k < (sz_w_h > 0 ? sz_w_h : 1); k++) mem->h_jacp_w[k] = 0.0;
+    for (int i = 0; i < sz_arg_h; i++) mem->h_jacp_arg[i] = NULL;
+    for (int i = 0; i < sz_res_h; i++) mem->h_jacp_res[i] = NULL;
+    if (sz_res_h > 0) mem->h_jacp_res[0] = mem->h_jacp_J_sparse;
 {%- endif %}
 
     assign_and_advance_int(nbx, &mem->idxbx, &c_ptr);
@@ -1707,7 +1785,6 @@ static void uncertainty_propagate_and_update(ocp_nlp_solver *solver, ocp_nlp_in 
     {%- endif %}
 {%- endif %}
 
-
 {%- if zoro_description.nlh_t + zoro_description.nuh_t > 0 %}
         // nonlinear constraints: h
         // Get C_{k+1} and D_{k+1}
@@ -1717,11 +1794,107 @@ static void uncertainty_propagate_and_update(ocp_nlp_solver *solver, ocp_nlp_in 
         blasfeo_pack_dmat(nh, nx, custom_mem->d_Cgh_mat+ng, ng+nh, &custom_mem->Ch_mat, 0, 0);
         blasfeo_pack_dmat(nh, nu, custom_mem->d_Dgh_mat+ng, ng+nh, &custom_mem->Dh_mat, 0, 0);
 
+{%- if (solver_options.sens_forw_p) and zoro_description.nonlinear_uncertainty_mode == "CONSTANT" %}
+        // Jtot = (C - D K) * Pi_{k+1} + h_p(x_{k+1}, u_{k+1}, p_{k+1})
+        // var_h = Jtot * Sigma_p * Jtot^T
+
+        {
+            double current_x[nx];
+            double current_u[nu];
+            double current_p[np];
+            double *true_p_global = nlp_in->global_data;
+            double dummy_z[1] = {0.0};
+
+            ocp_nlp_out_get(nlp_config, nlp_dims, nlp_out, ii+1, "x", current_x);
+            ocp_nlp_out_get(nlp_config, nlp_dims, nlp_out, ii+1, "u", current_u);
+            ocp_nlp_in_get(nlp_config, nlp_dims, nlp_in, ii+1, "p", current_p);
+
+            // Map arguments exactly like the stage-0 h_0 jac_p block
+            if (custom_mem->h_jacp_sz_arg > 0) custom_mem->h_jacp_arg[0] = current_x;
+            if (custom_mem->h_jacp_sz_arg > 1) custom_mem->h_jacp_arg[1] = current_u;
+            if (custom_mem->h_jacp_sz_arg > 2) custom_mem->h_jacp_arg[2] = dummy_z;
+            if (custom_mem->h_jacp_sz_arg > 3) custom_mem->h_jacp_arg[3] = current_p;
+            if (custom_mem->h_jacp_sz_arg > 4) custom_mem->h_jacp_arg[4] = true_p_global;
+
+            // Zero sparse and dense buffers
+            for (int k = 0; k < (custom_mem->h_jacp_nnz > 0 ? custom_mem->h_jacp_nnz : 1); k++)
+                custom_mem->h_jacp_J_sparse[k] = 0.0;
+            for (int k = 0; k < nh*np; k++)
+                custom_mem->d_dhdp_h_mat[k] = 0.0;
+
+            custom_mem->h_jacp_res[0] = custom_mem->h_jacp_J_sparse;
+
+            {{ model.name }}_constr_h_jac_p(custom_mem->h_jacp_arg,
+                                            custom_mem->h_jacp_res,
+                                            custom_mem->h_jacp_iw,
+                                            custom_mem->h_jacp_w,
+                                            NULL);
+
+            // Unpack sparse CasADi output into dense nh x np matrix
+            for (int i = 0; i < custom_mem->h_jacp_ncol; i++)
+            {
+                if (i >= np) break;
+                for (int k = custom_mem->h_jacp_colind[i]; k < custom_mem->h_jacp_colind[i+1]; k++)
+                {
+                    int r = custom_mem->h_jacp_row[k];
+                    custom_mem->d_dhdp_h_mat[r + i * custom_mem->h_jacp_nrow] = custom_mem->h_jacp_J_sparse[k];
+                }
+            }
+
+            blasfeo_pack_dmat(nh, np, custom_mem->d_dhdp_h_mat, nh, &custom_mem->dhdp_h_mat, 0, 0);
+        }
+
+        // temp_CaDK_mat = C - D K
+        blasfeo_dgecp(nh, nx, &custom_mem->Ch_mat, 0, 0, &custom_mem->temp_CaDK_mat, 0, 0);
+        blasfeo_dgemm_nn(nh, nx, nu, -1.0,
+                         &custom_mem->Dh_mat, 0, 0,
+                         K_mat, 0, 0,
+                         1.0,
+                         &custom_mem->temp_CaDK_mat, 0, 0,
+                         &custom_mem->temp_CaDK_mat, 0, 0);
+
+        // Jtot_h_mat = (C - D K) * Pi_{k+1}
+        blasfeo_dgemm_nn(nh, np, nx, 1.0,
+                         &custom_mem->temp_CaDK_mat, 0, 0,
+                         &custom_mem->Pi_mat, 0, 0,
+                         0.0,
+                         &custom_mem->Jtot_h_mat, 0, 0,
+                         &custom_mem->Jtot_h_mat, 0, 0);
+
+        // Jtot_h_mat += h_p
+        blasfeo_dgead(nh, np, 1.0,
+                      &custom_mem->dhdp_h_mat, 0, 0,
+                      &custom_mem->Jtot_h_mat, 0, 0);
+
+        // temp_h_mat = Jtot * Sigma_p
+        blasfeo_dgemm_nn(nh, np, np, 1.0,
+                         &custom_mem->Jtot_h_mat, 0, 0,
+                         &custom_mem->Sigma_p_mat, 0, 0,
+                         0.0,
+                         &custom_mem->temp_h_mat, 0, 0,
+                         &custom_mem->temp_h_mat, 0, 0);
+
+        // var_h_mat = temp_h_mat * Jtot^T
+        blasfeo_dgemm_nt(nh, nh, np, 1.0,
+                         &custom_mem->temp_h_mat, 0, 0,
+                         &custom_mem->Jtot_h_mat, 0, 0,
+                         0.0,
+                         &custom_mem->var_h_mat, 0, 0,
+                         &custom_mem->var_h_mat, 0, 0);
+
+        // Put gamma^2 * diag(var_h) into the h part of the backoff vector
+        blasfeo_ddiaex(nh, backoff_scaling_gamma*backoff_scaling_gamma,
+                       &custom_mem->var_h_mat, 0, 0,
+                       &custom_mem->ineq_backoff_sq_buffer[ii+1], nbu + nbx + ng);
+
+{%- else %}
         compute_gh_beta(K_mat, &custom_mem->Ch_mat,
                      &custom_mem->Dh_mat, &custom_mem->temp_CaDK_mat,
                      &custom_mem->temp_CaDKmP_mat, &custom_mem->temp_beta_mat,
                      &custom_mem->uncertainty_matrix_buffer[ii+1], nh, nx, nu);
         blasfeo_ddiaex(nh, backoff_scaling_gamma*backoff_scaling_gamma, &custom_mem->temp_beta_mat, 0, 0, &custom_mem->ineq_backoff_sq_buffer[ii+1], nbu + nbx + ng);
+{%- endif %}
+
 {%- if zoro_description.feedback_optimization_mode is containing("BARRIER") %}
         blasfeo_dvecad(nh, backoff_eps, &custom_mem->ricc_ones, 0, &custom_mem->ineq_backoff_sq_buffer[ii+1], nbu + nbx + ng);
 {%- endif %}
